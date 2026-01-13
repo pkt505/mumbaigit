@@ -1,0 +1,335 @@
+
+Y1X8Q~nUnSUYyNa5___hR0jh8N~59ihbL01P1a63
+
+./terraform plan -out main.tfplan
+
+./terraform apply "main.tfplan"
+
+----------------------------------------------------------
+
+terraform {
+  required_providers {
+    azurerm = {
+      source = "hashicorp/azurerm"
+      version = "4.57.0"
+    }
+  }
+}
+
+provider "azurerm" {
+    features {}
+    subscription_id = "bf864462-6396-492f-9a6d-1eb5831f6e16"
+    client_id = "43490156-13e6-4883-b96d-ef7cd39c5488"
+    client_secret = "Y1X8Q~nUnSUYyNa5___hR0jh8N~59ihbL01P1a63"
+    tenant_id = "214cdc60-fc62-457c-8320-72684b7a8ed6"
+  
+}
+------------------------------------------------------------------------------
+Here we are defining details in local and using whenever require to call in other resource like in Local i have mentioned
+Resoruce group and location name but whenever require i am using in either creation of Resource group or storage group to avoid
+repatative/hard code
+
+locals {
+  resource_group_name = "praveen"
+  location = "east us"
+}
+resource "azurerm_resource_group" "rg" {
+  name = local.resource_group_name
+  location = local.location
+  
+}
+resource "azurerm_storage_account" "store" {
+  name                     = "praveen505"
+  resource_group_name      = local.resource_group_name
+  location                 = local.location
+  account_tier             = "Standard"
+  account_replication_type = "GRS"
+depends_on = [ azurerm_resource_group.rg ]
+  }
+
+  resource "azurerm_storage_container" "praveen6890" {
+  name                  = "containerpraveen"
+  storage_account_name = azurerm_storage_account.store.name
+  
+}
+
+resource "azurerm_storage_blob" "blob5050" {
+  name                   = "LICENSE.txt"
+  storage_account_name = azurerm_storage_account.store.name
+  storage_container_name = azurerm_storage_container.praveen6890.name
+  type                   = "Block"
+  source                 = "LICENSE.txt"
+  depends_on = [ azurerm_storage_container.praveen6890 ]
+}
+--------------------------------------------------------------------
+Two VNet, Two Subnet, Two NSG and assosiation with Subnet
+locals {
+  resource_group_name = "praveen"
+  location = "east us"
+}
+resource "azurerm_resource_group" "rg" {
+  name = local.resource_group_name
+  location = local.location
+}
+ 
+ resource "azurerm_virtual_network" "vnet" {
+  name                = "tf-vnet"
+  location            = local.location
+  resource_group_name = local.resource_group_name
+  address_space       = ["10.0.0.0/16"]
+  dns_servers         = ["10.0.0.4", "10.0.0.5"]
+  depends_on = [ azurerm_resource_group.rg ]
+  }
+  resource "azurerm_subnet" "subnet1" {
+  name                 = "subnet1"
+  resource_group_name  = local.resource_group_name
+  virtual_network_name = azurerm_virtual_network.vnet.name
+  address_prefixes     = ["10.0.1.0/24"]
+  }
+   resource "azurerm_virtual_network" "vnet2" {
+  name                = "tf-vnet2"
+  location            = local.location
+  resource_group_name = local.resource_group_name
+  address_space       = ["10.0.0.0/12"]
+    depends_on = [ azurerm_resource_group.rg ]
+  }
+
+  resource "azurerm_subnet" "subnet2" {
+  name                 = "subnet2"
+  resource_group_name  = local.resource_group_name
+  virtual_network_name = azurerm_virtual_network.vnet2.name
+  address_prefixes     = ["10.0.2.0/24"]
+  depends_on = [ azurerm_virtual_network.vnet2 ]
+  }
+  resource "azurerm_network_security_group" "nsg1" {
+  name                = "nsg1"
+  location            = local.location
+  resource_group_name = local.resource_group_name
+
+  security_rule {
+    name                       = "allow-RDP"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "3389"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+}
+resource "azurerm_subnet_network_security_group_association" "association01" {
+  subnet_id                 = azurerm_subnet.subnet1.id
+  network_security_group_id = azurerm_network_security_group.nsg1.id
+}
+resource "azurerm_network_security_group" "nsg2" {
+  name                = "nsg2"
+  location            = local.location
+  resource_group_name = local.resource_group_name
+
+  security_rule {
+    name                       = "allow-RDP"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "3389"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+}
+
+resource "azurerm_subnet_network_security_group_association" "association02" {
+  subnet_id                 = azurerm_subnet.subnet2.id
+  network_security_group_id = azurerm_network_security_group.nsg2.id
+  
+}
+----------------------------------------------------------------------------------------
+NIC Creation in subnet
+resource "azurerm_network_interface" "nic1" {
+  name                = "ternaform-nic"
+  location            = local.location
+  resource_group_name = local.resource_group_name
+
+  ip_configuration {
+    name                          = "internal"
+    subnet_id                     = azurerm_subnet.subnet1.id
+    private_ip_address_allocation = "Dynamic"
+  }
+}
+--------------------------------------------------------------------------
+Public IP creation
+resource "azurerm_public_ip" "pubip" {
+  name                = "terraform-publicip"
+  resource_group_name = local.resource_group_name
+  location            = local.location
+  allocation_method   = "Static"
+}
+------------------------------------------------------------------------
+Public IP address assosicion with existing NIC
+
+resource "azurerm_network_interface" "nic1" {
+  name                = "ternaform-nic"
+  location            = local.location
+  resource_group_name = local.resource_group_name
+  
+  ip_configuration {
+    name                          = "internal"
+    subnet_id                     = azurerm_subnet.subnet1.id
+    private_ip_address_allocation = "Dynamic"
+    public_ip_address_id = azurerm_public_ip.pubip.id
+  }
+}
+---------------------------------------------------------
+Final VM creation Terraform command
+locals {
+  resource_group_name = "praveen"
+  location = "south india"
+}
+resource "azurerm_resource_group" "rg" {
+  name = local.resource_group_name
+  location = local.location
+}
+ 
+ resource "azurerm_virtual_network" "vnet" {
+  name                = "tf-vnet"
+  location            = local.location
+  resource_group_name = local.resource_group_name
+  address_space       = ["10.0.0.0/16"]
+  dns_servers         = ["10.0.0.4", "10.0.0.5"]
+  depends_on = [ azurerm_resource_group.rg ]
+  }
+  resource "azurerm_subnet" "subnet1" {
+  name                 = "subnet1"
+  resource_group_name  = local.resource_group_name
+  virtual_network_name = azurerm_virtual_network.vnet.name
+  address_prefixes     = ["10.0.1.0/24"]
+  depends_on = [ azurerm_virtual_network.vnet ]
+  }
+   resource "azurerm_virtual_network" "vnet2" {
+  name                = "tf-vnet2"
+  location            = local.location
+  resource_group_name = local.resource_group_name
+  address_space       = ["10.0.0.0/12"]
+    depends_on = [ azurerm_resource_group.rg ]
+  }
+
+  resource "azurerm_subnet" "subnet2" {
+  name                 = "subnet2"
+  resource_group_name  = local.resource_group_name
+  virtual_network_name = azurerm_virtual_network.vnet2.name
+  address_prefixes     = ["10.0.2.0/24"]
+  depends_on = [ azurerm_virtual_network.vnet2 ]
+  }
+  resource "azurerm_network_security_group" "nsg1" {
+  name                = "nsg1"
+  location            = local.location
+  resource_group_name = local.resource_group_name
+  depends_on = [ azurerm_virtual_network.vnet ]
+
+  security_rule {
+    name                       = "allow-RDP"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "3389"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+}
+resource "azurerm_subnet_network_security_group_association" "association01" {
+  subnet_id                 = azurerm_subnet.subnet1.id
+  network_security_group_id = azurerm_network_security_group.nsg1.id
+}
+resource "azurerm_network_security_group" "nsg2" {
+  name                = "nsg2"
+  location            = local.location
+  resource_group_name = local.resource_group_name
+  depends_on = [ azurerm_virtual_network.vnet2 ]
+
+  security_rule {
+    name                       = "allow-RDP"
+    priority                   = 100
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "3389"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+}
+
+resource "azurerm_subnet_network_security_group_association" "association02" {
+  subnet_id                 = azurerm_subnet.subnet2.id
+  network_security_group_id = azurerm_network_security_group.nsg2.id
+  depends_on = [ azurerm_subnet.subnet2 ]
+  
+}
+resource "azurerm_network_interface" "nic1" {
+  name                = "ternaform-nic"
+  location            = local.location
+  resource_group_name = local.resource_group_name
+  depends_on = [ azurerm_subnet.subnet1 ]
+  
+  ip_configuration {
+    name                          = "internal"
+    subnet_id                     = azurerm_subnet.subnet1.id
+    private_ip_address_allocation = "Dynamic"
+     public_ip_address_id = azurerm_public_ip.pubip.id
+    
+  }
+}
+resource "azurerm_public_ip" "pubip" {
+  name                = "terraform-publicip"
+  resource_group_name = local.resource_group_name
+  location            = local.location
+  allocation_method   = "Static"
+}
+resource "azurerm_windows_virtual_machine" "virtual-machine" {
+  name                = "vm1"
+  resource_group_name = local.resource_group_name
+  location            = local.location
+  size                = "Standard_b2as_v2"
+  admin_username      = "adminuser"
+  admin_password      = "P@$$w0rd1234!"
+  network_interface_ids = [
+    azurerm_network_interface.nic1.id
+  ]
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+    
+  }
+
+  source_image_reference {
+    publisher = "MicrosoftWindowsServer"
+    offer     = "WindowsServer"
+    sku       = "2016-Datacenter"
+    version   = "latest"
+  }
+}
+------------------------------------------------------------------------------------------------------------------
+#New disk creation
+resource "azurerm_managed_disk" "Data-Disk" {
+  name                 = "Disk01"
+  location             = local.location
+  resource_group_name  = local.resource_group_name
+  storage_account_type = "Standard_LRS"
+  create_option        = "Empty"
+  disk_size_gb         = "1"
+  }
+
+ # Attach the disk to the VM
+resource "azurerm_virtual_machine_data_disk_attachment" "disk_attach" {
+  managed_disk_id    = azurerm_managed_disk.Data-Disk.id
+  virtual_machine_id = azurerm_windows_virtual_machine.virtual-machine.id
+  lun                = 0
+  caching            = "ReadWrite"
+  depends_on = [ azurerm_managed_disk.Data-Disk ]
+}
+------------------------------------------------------

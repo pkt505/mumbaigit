@@ -1,0 +1,136 @@
+Perfect — let’s do a **side‑by‑side comparison of `count` vs `for_each`** in Terraform for creating multiple Azure VMs. This will help you see both the syntax and how you reference the resources later.
+
+---
+
+## 🔹 Using `count`
+```hcl
+variable "vm_count" {
+  type    = number
+  default = 3
+}
+
+resource "azurerm_linux_virtual_machine" "vm" {
+  count                 = var.vm_count
+  name                  = "vm-${count.index}"
+  resource_group_name   = azurerm_resource_group.rg.name
+  location              = var.location
+  size                  = "Standard_B1s"
+  admin_username        = "azureuser"
+  admin_password        = "Password123!"
+  network_interface_ids = [azurerm_network_interface.nic[count.index].id]
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "UbuntuServer"
+    sku       = "18.04-LTS"
+    version   = "latest"
+  }
+}
+```
+
+- Creates **3 VMs** named `vm-0`, `vm-1`, `vm-2`.
+- Reference example:  
+  - `azurerm_linux_virtual_machine.vm[0].id`  
+  - `azurerm_linux_virtual_machine.vm[1].id`
+
+---
+
+## 🔹 Using `for_each`
+```hcl
+variable "vm_names" {
+  type    = list(string)
+  default = ["app", "db", "cache"]
+}
+
+resource "azurerm_linux_virtual_machine" "vm" {
+  for_each              = toset(var.vm_names)
+  name                  = each.key
+  resource_group_name   = azurerm_resource_group.rg.name
+  location              = var.location
+  size                  = "Standard_B1s"
+  admin_username        = "azureuser"
+  admin_password        = "Password123!"
+  network_interface_ids = [azurerm_network_interface.nic[each.key].id]
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "UbuntuServer"
+    sku       = "18.04-LTS"
+    version   = "latest"
+  }
+}
+```
+
+- Creates **3 VMs** named `app`, `db`, `cache`.
+- Reference example:  
+  - `azurerm_linux_virtual_machine.vm["app"].id`  
+  - `azurerm_linux_virtual_machine.vm["db"].id`
+
+---
+
+## ⚡ Key Differences
+| Feature | **count** | **for_each** |
+|---------|-----------|--------------|
+| Input   | Number (`vm_count`) | Map or Set (`vm_names`) |
+| Resource names | Numeric suffix (`vm-0`, `vm-1`) | Meaningful keys (`app`, `db`) |
+| Reference style | `resource[0]`, `resource[1]` | `resource["app"]`, `resource["db"]` |
+| Flexibility | Fixed number of items | Custom names, easier to manage |
+
+---
+
+👉 In short:
+- Use **`count`** when you just need *N identical resources*.
+- Use **`for_each`** when you want *resources with meaningful names* or when you’re looping over a list/map.
+
+-----------------------------------------------------------------------------------------------------------------
+multile storage account creation with help of variable and for_each command in terraform
+# file in variable.tf
+variable "resource_group_name" {
+    description = "resource group name"
+    type = string
+    default = "rg-praveen"
+  }
+  variable "location" {
+    description = "location name"
+    type = string
+    default = "southindia"
+    
+  }
+
+  variable "storage_accounts" {
+    description = "Storage Account"
+    type = list(string)
+    default = ["itstorage505", "salestorage505", "hrstorage505"]
+    
+  }
+#file in main.tf
+resource "azurerm_resource_group" "rg" {
+  name = var.resource_group_name
+  location = var.location
+}
+ 
+ # Create multiple storage accounts using count
+resource "azurerm_storage_account" "storage_praveen" {
+  for_each = toset(var.storage_accounts)
+  name                     = each.key
+  resource_group_name      = var.resource_group_name
+  location                 = var.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+  depends_on = [ azurerm_resource_group.rg ]
+}
+#output is 3 storage will be created with name of itstorage505, Salestorage505, hrstorage505
+#difference between count and for_each
+#count will create name with 0,1,2 or till how many count we will mention while for_each create with specific name which we difined in variable.tf file
+
+
